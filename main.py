@@ -93,4 +93,11 @@ async def zendesk(ticket: ZendeskTicket):
     handler = agent.run(query)
     result = await handler
 
-    return {"agent_output": str(result)}
+    import json
+
+response = agent.chat(query)
+
+# If response is a string containing JSON
+parsed = json.loads(response)
+
+return parsed
