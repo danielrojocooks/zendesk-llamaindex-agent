@@ -120,6 +120,22 @@ def health():
 # -------------------------
 # Zendesk helpers
 # -------------------------
+def zendesk_add_public_reply(ticket_id: int, body: str) -> None:
+    if not zendesk_ready():
+        raise HTTPException(status_code=500, detail="Zendesk env vars missing (subdomain/email/api_token).")
+    url = zendesk_api_url(f"/tickets/{ticket_id}.json")
+    payload = {
+        "ticket": {
+            "comment": {
+                "public": True,
+                "body": body
+            }
+        }
+    }
+    r = requests.put(url, auth=zendesk_auth(), json=payload, timeout=20)
+    if r.status_code >= 300:
+        raise HTTPException(status_code=502, detail=f"Zendesk reply failed: {r.status_code} {r.text}")
+
 def zendesk_ready() -> bool:
     return bool(ZENDESK_SUBDOMAIN and ZENDESK_EMAIL and ZENDESK_API_TOKEN)
 
@@ -288,7 +304,10 @@ async def zendesk(ticket: ZendeskTicket, req: Request):
         email_body = (args.get("email_body") or "").strip()
         if not email_body:
             raise HTTPException(status_code=502, detail="Empty email_body from model")
-        return {"action": "reply_to_customer", "email_body": email_body}
+        if ticket.ticket_id is not None:
+    zendesk_add_public_reply(ticket.ticket_id, email_body)
+    zendesk_add_tags(ticket.ticket_id, ["ai_replied"])
+return {"status": "replied"}
 
     if fn == "escalate_ticket":
         reason = (args.get("reason") or "").strip() or "Escalated: KB insufficient."
@@ -296,7 +315,7 @@ async def zendesk(ticket: ZendeskTicket, req: Request):
             zendesk_add_internal_note_and_tags(
                 ticket_id=ticket.ticket_id,
                 note=f"Auto-escalated: {reason}",
-                tags=["auto_escalated", "kb_insufficient"]
+                tags=["auto_escalated", "kb_insufficient, ai_replied"]
             )
         return {"action": "escalate_ticket", "reason": reason}
 
