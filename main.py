@@ -71,7 +71,7 @@ async def zendesk(ticket: ZendeskTicket):
     ...
     """
 
-    response = agent.chat(query)
+response = agent.run(query)
 
     import json
 
