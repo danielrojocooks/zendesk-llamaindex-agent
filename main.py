@@ -68,36 +68,20 @@ class ZendeskTicket(BaseModel):
 async def zendesk(ticket: ZendeskTicket):
 
     query = f"""
-    You are a Zendesk AI support agent.
-
-    Determine:
-    1. Whether this ticket is answerable from documentation.
-    2. If yes, generate a professional customer reply.
-    3. If not, recommend escalation and summarize why.
-
-    Ticket:
-    Subject: {ticket.subject}
-    Description: {ticket.description}
-
-    Respond in this exact JSON format:
-
-    {{
-        "answerable": true or false,
-        "customer_reply": "...",
-        "internal_summary": "...",
-        "confidence": 0-1,
-        "recommended_tags": ["..."]
-    }}
+    ...
     """
 
-    handler = agent.run(query)
-    result = await handler
+    response = agent.chat(query)
 
     import json
 
-response = agent.chat(query)
+    if isinstance(response, dict):
+        return response
 
-# If response is a string containing JSON
-parsed = json.loads(response)
+    if isinstance(response, str):
+        return json.loads(response)
 
-return parsed
+    if hasattr(response, "response"):
+        return json.loads(response.response)
+
+    return {"error": "Unexpected response type"}
