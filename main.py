@@ -73,7 +73,7 @@ async def zendesk(ticket: ZendeskTicket):
     """
 
     handler = agent.run(query)
-    result = handler.run()
+    result = await handler   # ← THIS is the correct execution
 
     content = result.response if hasattr(result, "response") else result
 
