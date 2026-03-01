@@ -302,8 +302,14 @@ async def zendesk(ticket: ZendeskTicket, req: Request):
     # 3) Execute tool effects (minimal)
     if fn == "reply_to_customer":
     email_body = (args.get("email_body") or "").strip()
-    if not email_body:
+    if not email_body:s
         raise HTTPException(status_code=502, detail="Empty email_body from model")
+
+    if ticket.ticket_id is not None:
+        zendesk_add_public_reply(ticket.ticket_id, email_body)s
+        zendesk_add_tags(ticket.ticket_id, ["ai_replied"])
+
+    return {"status": "replied"}s
 
     if ticket.ticket_id is not None:
         zendesk_add_public_reply(ticket.ticket_id, email_body)
