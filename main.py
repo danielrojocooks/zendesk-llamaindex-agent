@@ -16,7 +16,7 @@ load_dotenv()
 
 app = FastAPI()
 
-APP_BUILD = "fc-tools-v1"
+APP_BUILD = "fc-tools-v2"
 
 # -------------------------
 # ENV
@@ -200,6 +200,30 @@ class ZendeskTicket(BaseModel):
 # -------------------------
 # Main endpoint
 # -------------------------
+@app.post("/fc_test")
+async def fc_test():
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        temperature=0,
+        tools=TOOLS,
+        tool_choice="required",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": "Call a tool now."},
+        ],
+    )
+
+    msg = resp.choices[0].message
+    tool_calls = getattr(msg, "tool_calls", None) or []
+
+    return {
+        "build": APP_BUILD,
+        "tool_calls_len": len(tool_calls),
+        "content": msg.content,
+        "tool_name": tool_calls[0].function.name if tool_calls else None,
+        "tool_args": json.loads(tool_calls[0].function.arguments) if tool_calls else None,
+    }
+
 @app.post("/zendesk")
 async def zendesk(ticket: ZendeskTicket, req: Request):
     # Optional secret verification if you configured it in Zendesk webhook headers
@@ -225,6 +249,8 @@ async def zendesk(ticket: ZendeskTicket, req: Request):
             "action": "escalate_ticket",
             "reason": reason
         }
+    
+    
 
     kb_context = format_kb_context(nodes)
 
