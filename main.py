@@ -300,10 +300,29 @@ async def zendesk(ticket: ZendeskTicket, req: Request):
     args = json.loads(call.function.arguments or "{}")
 
     # 3) Execute tool effects (minimal)
-    if fn == "reply_to_customer":
+
+   if fn == "reply_to_customer":
     email_body = (args.get("email_body") or "").strip()
-    if not email_body:s
+    if not email_body:
         raise HTTPException(status_code=502, detail="Empty email_body from model")
+
+    if ticket.ticket_id:
+        zendesk_add_public_reply(ticket.ticket_id, email_body)
+        zendesk_add_tags(ticket.ticket_id, ["ai_replied"])
+
+    return {"status": "replied"}
+
+elif fn == "escalate_ticket":
+    reason = (args.get("reason") or "").strip() or "Escalated: KB insufficient."
+
+    if ticket.ticket_id:
+        zendesk_add_internal_note_and_tags(
+            ticket.ticket_id,
+            f"Auto-escalated: {reason}",
+            ["auto_escalated", "ai_replied"]
+        )
+
+    return {"status": "escalated"}
 
     if ticket.ticket_id is not None:
         zendesk_add_public_reply(ticket.ticket_id, email_body)s
