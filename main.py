@@ -299,58 +299,38 @@ async def zendesk(ticket: ZendeskTicket, req: Request):
     fn = call.function.name
     args = json.loads(call.function.arguments or "{}")
 
-    # 3) Execute tool effects (minimal)
+        # 3) Execute tool effects
 
-   if fn == "reply_to_customer":
-    email_body = (args.get("email_body") or "").strip()
-    if not email_body:
-        raise HTTPException(status_code=502, detail="Empty email_body from model")
+    if fn == "reply_to_customer":
+        email_body = (args.get("email_body") or "").strip()
+        if not email_body:
+            raise HTTPException(status_code=502, detail="Empty email_body from model")
 
-    if ticket.ticket_id:
-        zendesk_add_public_reply(ticket.ticket_id, email_body)
-        zendesk_add_tags(ticket.ticket_id, ["ai_replied"])
+        if ticket.ticket_id:
+            zendesk_add_public_reply(ticket.ticket_id, email_body)
+            zendesk_add_tags(ticket.ticket_id, ["ai_replied"])
 
-    return {"status": "replied"}
+        return {"status": "replied"}
 
-elif fn == "escalate_ticket":
-    reason = (args.get("reason") or "").strip() or "Escalated: KB insufficient."
-
-    if ticket.ticket_id:
-        zendesk_add_internal_note_and_tags(
-            ticket.ticket_id,
-            f"Auto-escalated: {reason}",
-            ["auto_escalated", "ai_replied"]
-        )
-
-    return {"status": "escalated"}
-
-    if ticket.ticket_id is not None:
-        zendesk_add_public_reply(ticket.ticket_id, email_body)s
-        zendesk_add_tags(ticket.ticket_id, ["ai_replied"])
-
-    return {"status": "replied"}s
-
-    if ticket.ticket_id is not None:
-        zendesk_add_public_reply(ticket.ticket_id, email_body)
-        zendesk_add_tags(ticket.ticket_id, ["ai_replied"])
-
-    return {"status": "replied"}
-
-    if fn == "escalate_ticket":
+    elif fn == "escalate_ticket":
         reason = (args.get("reason") or "").strip() or "Escalated: KB insufficient."
-        if ticket.ticket_id is not None:
-            zendesk_add_internal_note_and_tags(
-                ticket_id=ticket.ticket_id,
-                note=f"Auto-escalated: {reason}",
-                tags=["auto_escalated", "kb_insufficient, ai_replied"]
-            )
-        return {"action": "escalate_ticket", "reason": reason}
 
-    if fn == "apply_tags":
+        if ticket.ticket_id:
+            zendesk_add_internal_note_and_tags(
+                ticket.ticket_id,
+                f"Auto-escalated: {reason}",
+                ["auto_escalated", "ai_replied"]
+            )
+
+        return {"status": "escalated"}
+
+    elif fn == "apply_tags":
         tags = args.get("tags") or []
-        # If we have a ticket_id, apply tags in Zendesk; otherwise just return them.
-        if ticket.ticket_id is not None and tags:
+        if ticket.ticket_id and tags:
             zendesk_add_tags(ticket.ticket_id, tags)
-        return {"action": "apply_tags", "tags": tags}
+
+        return {"status": "tags_applied"}
 
     raise HTTPException(status_code=502, detail=f"Unknown tool: {fn}")
+
+   
