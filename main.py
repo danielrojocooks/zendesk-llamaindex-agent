@@ -68,20 +68,21 @@ class ZendeskTicket(BaseModel):
 async def zendesk(ticket: ZendeskTicket):
 
     query = f"""
+    You are a Zendesk AI support agent.
     ...
     """
 
-response = agent.run(query)
-
-    import json
-
-    if isinstance(response, dict):
-        return response
-
-    if isinstance(response, str):
-        return json.loads(response)
+    response = agent.run(query)
 
     if hasattr(response, "response"):
-        return json.loads(response.response)
+        content = response.response
+    else:
+        content = response
 
-    return {"error": "Unexpected response type"}
+    if isinstance(content, str):
+        return json.loads(content)
+
+    if isinstance(content, dict):
+        return content
+
+    return {"raw": str(content)}
