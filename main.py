@@ -72,17 +72,12 @@ async def zendesk(ticket: ZendeskTicket):
     ...
     """
 
-    response = agent.run(query)
+    handler = await agent.arun(query)
+    result = await handler.get_response()
 
-    if hasattr(response, "response"):
-        content = response.response
-    else:
-        content = response
+    content = result.response if hasattr(result, "response") else result
 
     if isinstance(content, str):
         return json.loads(content)
 
-    if isinstance(content, dict):
-        return content
-
-    return {"raw": str(content)}
+    return content
