@@ -242,26 +242,30 @@ async def fc_test():
 
 @app.post("/zendesk")
 async def zendesk(req: Request):
-payload = await req.json()
-print("RAW PAYLOAD:", payload)
 
-ticket_data = payload.get("ticket", {})
+    payload = await req.json()
+    print("RAW PAYLOAD:", payload)
 
-ticket_id = ticket_data.get("id")
-subject = ticket_data.get("subject")
-description = ticket_data.get("description")
+    ticket_data = payload.get("ticket", {})
 
-requester = ticket_data.get("requester", {})
-requester_email = requester.get("email")
+    ticket_id = ticket_data.get("id")
+    subject = ticket_data.get("subject") or ""
+    description = ticket_data.get("description") or ""
 
-ticket = ZendeskTicket(
-    ticket_id=ticket_id,
-    subject=subject,
-    description=description,
-    requester_email=requester_email,
-)
+    requester = ticket_data.get("requester", {})
+    requester_email = requester.get("email")
 
-    # 1) Deterministic gate: no relevant KB hit => escalate without LLM
+    ticket = ZendeskTicket(
+        ticket_id=ticket_id,
+        subject=subject,
+        description=description,
+        requester_email=requester_email,
+    )
+
+    # Build query text (YOU WERE MISSING THIS)
+    query_text = f"Subject: {ticket.subject}\nDescription: {ticket.description}".strip()
+
+    # 1) Deterministic gate
     nodes = retrieve_kb(query_text)
     if not is_relevant_hit(nodes):
         reason = "No relevant KB hit above similarity cutoff."
@@ -271,17 +275,11 @@ ticket = ZendeskTicket(
                 note=f"Auto-escalated: {reason}",
                 tags=["auto_escalated", "kb_miss"]
             )
-        # Return tool-shaped payload for your downstream router if desired
-        return {
-            "action": "escalate_ticket",
-            "reason": reason
-        }
-    
-    
+        return {"status": "escalated"}
 
     kb_context = format_kb_context(nodes)
 
-    # 2) Function call step: force exactly one tool call, no prose
+    # 2) Function call step
     user_message = (
         "Ticket:\n"
         f"{query_text}\n\n"
@@ -303,15 +301,15 @@ ticket = ZendeskTicket(
 
     msg = resp.choices[0].message
     tool_calls = getattr(msg, "tool_calls", None) or []
+
     if len(tool_calls) != 1:
-        raise HTTPException(status_code=502, detail=f"Model returned {len(tool_calls)} tool calls; expected 1.")
+        raise HTTPException(status_code=502, detail="Model must return exactly one tool call.")
 
     call = tool_calls[0]
     fn = call.function.name
     args = json.loads(call.function.arguments or "{}")
 
-        # 3) Execute tool effects
-
+    # 3) Execute tool effects
     if fn == "reply_to_customer":
         email_body = (args.get("email_body") or "").strip()
         if not email_body:
@@ -343,5 +341,3 @@ ticket = ZendeskTicket(
         return {"status": "tags_applied"}
 
     raise HTTPException(status_code=502, detail=f"Unknown tool: {fn}")
-
-   
