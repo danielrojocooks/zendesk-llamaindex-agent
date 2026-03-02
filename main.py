@@ -244,24 +244,20 @@ async def fc_test():
 async def zendesk(req: Request):
 
     content_type = req.headers.get("content-type", "")
-    print("CONTENT TYPE:", content_type)
+print("CONTENT TYPE:", content_type)
 
-    if "application/json" in content_type:
-        payload = await req.json()
+raw_body = await req.body()
+body_text = raw_body.decode("utf-8", errors="ignore")
 
-    elif "application/x-www-form-urlencoded" in content_type:
-        form = await req.form()
-        payload_str = form.get("payload")
-        print("FORM PAYLOAD RAW:", payload_str)
-        payload = json.loads(payload_str)
+print("RAW BODY TEXT:", body_text)
 
-    else:
-        body = await req.body()
-        print("UNSUPPORTED BODY:", body.decode())
-        return {"status": "unsupported content type"}
+try:
+    payload = json.loads(body_text)
+except Exception as e:
+    print("JSON PARSE ERROR:", str(e))
+    return {"status": "invalid json body"}
 
-    print("RAW PAYLOAD:", payload)
-
+print("PARSED PAYLOAD:", payload)
     ticket_data = payload.get("ticket", {})
 
     ticket_id = ticket_data.get("id")
