@@ -243,8 +243,26 @@ async def fc_test():
 @app.post("/zendesk")
 async def zendesk(req: Request):
 
+    import json
+
+content_type = req.headers.get("content-type", "")
+print("CONTENT TYPE:", content_type)
+
+if "application/json" in content_type:
     payload = await req.json()
-    print("RAW PAYLOAD:", payload)
+
+elif "application/x-www-form-urlencoded" in content_type:
+    form = await req.form()
+    payload_str = form.get("payload")
+    print("FORM PAYLOAD RAW:", payload_str)
+    payload = json.loads(payload_str)
+
+else:
+    body = await req.body()
+    print("UNSUPPORTED BODY:", body.decode())
+    return {"status": "unsupported content type"}
+
+print("RAW PAYLOAD:", payload)
 
     ticket_data = payload.get("ticket", {})
 
