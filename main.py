@@ -16,7 +16,7 @@ load_dotenv()
 
 app = FastAPI()
 
-APP_BUILD = "fc-tools-v3-clean"
+APP_BUILD = "fc-tools-v4-stable"
 
 # -------------------------
 # ENV
@@ -69,24 +69,6 @@ TOOLS = [
                 "additionalProperties": False
             }
         }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "apply_tags",
-            "description": "Apply tags for tracking.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"}
-                    }
-                },
-                "required": ["tags"],
-                "additionalProperties": False
-            }
-        }
     }
 ]
 
@@ -95,7 +77,6 @@ SYSTEM_PROMPT = (
     "Respond ONLY by calling exactly ONE tool.\n"
     "- If KB answers the question → reply_to_customer.\n"
     "- If KB insufficient → escalate_ticket.\n"
-    "- Use apply_tags only when useful.\n"
 )
 
 # -------------------------
@@ -145,15 +126,14 @@ def zendesk_add_public_reply(ticket_id: int, body: str):
     if r.status_code >= 300:
         raise HTTPException(status_code=502, detail=r.text)
 
-def zendesk_add_internal_note(ticket_id: int, note: str, tags: List[str]):
+def zendesk_add_internal_note(ticket_id: int, note: str):
     if not zendesk_ready():
         raise HTTPException(status_code=500, detail="Zendesk not configured")
 
     url = zendesk_api_url(f"/tickets/{ticket_id}.json")
     payload = {
         "ticket": {
-            "comment": {"public": False, "body": note},
-            "additional_tags": tags
+            "comment": {"public": False, "body": note}
         }
     }
 
@@ -194,15 +174,19 @@ class ZendeskTicket(BaseModel):
     requester_email: Optional[str] = None
 
 # -------------------------
-# Zendesk Webhook Endpoint
+# Webhook Endpoint
 # -------------------------
 @app.post("/zendesk")
 async def zendesk(req: Request):
 
     raw_body = await req.body()
-    body_text = raw_body.decode("utf-8", errors="ignore")
+    body_text = raw_body.decode("utf-8", errors="ignore").strip()
 
     print("RAW BODY:", body_text)
+
+    # Fix malformed body like "{}{ ... }"
+    if body_text.startswith("{}{"):
+        body_text = body_text[2:]
 
     try:
         payload = json.loads(body_text)
@@ -210,13 +194,17 @@ async def zendesk(req: Request):
         print("JSON ERROR:", str(e))
         return {"status": "invalid_json"}
 
-    ticket_data = payload.get("ticket", {})
+    # Support both flat and nested payloads
+    if "ticket" in payload:
+        data = payload["ticket"]
+    else:
+        data = payload
 
     ticket = ZendeskTicket(
-        ticket_id=ticket_data.get("id"),
-        subject=ticket_data.get("subject") or "",
-        description=ticket_data.get("description") or "",
-        requester_email=(ticket_data.get("requester") or {}).get("email"),
+        ticket_id=int(data.get("ticket_id") or data.get("id") or 0),
+        subject=data.get("subject") or "",
+        description=data.get("description") or "",
+        requester_email=data.get("requester_email"),
     )
 
     query_text = f"{ticket.subject}\n{ticket.description}".strip()
@@ -227,8 +215,7 @@ async def zendesk(req: Request):
         if ticket.ticket_id:
             zendesk_add_internal_note(
                 ticket.ticket_id,
-                "Auto-escalated: No relevant KB hit.",
-                ["auto_escalated"]
+                "Auto-escalated: No relevant KB hit."
             )
         return {"status": "escalated"}
 
@@ -272,12 +259,8 @@ async def zendesk(req: Request):
         if ticket.ticket_id:
             zendesk_add_internal_note(
                 ticket.ticket_id,
-                f"Auto-escalated: {reason}",
-                ["auto_escalated"]
+                f"Auto-escalated: {reason}"
             )
         return {"status": "escalated"}
-
-    if fn == "apply_tags":
-        return {"status": "tags_only"}
 
     raise HTTPException(status_code=502, detail="Unknown tool")
