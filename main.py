@@ -241,14 +241,25 @@ async def fc_test():
     }
 
 @app.post("/zendesk")
-async def zendesk(ticket: ZendeskTicket, req: Request):
-    # Optional secret verification if you configured it in Zendesk webhook headers
-    if ZENDESK_SECRET:
-        got = req.headers.get("x-zendesk-secret", "")
-        if got != ZENDESK_SECRET:
-            raise HTTPException(status_code=401, detail="Invalid secret")
+async def zendesk(req: Request):
+payload = await req.json()
+print("RAW PAYLOAD:", payload)
 
-    query_text = f"Subject: {ticket.subject}\nDescription: {ticket.description}".strip()
+ticket_data = payload.get("ticket", {})
+
+ticket_id = ticket_data.get("id")
+subject = ticket_data.get("subject")
+description = ticket_data.get("description")
+
+requester = ticket_data.get("requester", {})
+requester_email = requester.get("email")
+
+ticket = ZendeskTicket(
+    ticket_id=ticket_id,
+    subject=subject,
+    description=description,
+    requester_email=requester_email,
+)
 
     # 1) Deterministic gate: no relevant KB hit => escalate without LLM
     nodes = retrieve_kb(query_text)
