@@ -1,25 +1,56 @@
 zendesk-llamaindex-agent
-
-A LlamaIndex RAG pipeline with a FastAPI integration layer that handles Zendesk support tickets end to end.
-When a ticket comes in, the system retrieves relevant documentation chunks, generates a grounded response using OpenAI, and posts the reply directly back to the Zendesk ticket. Out-of-scope questions are automatically escalated with an internal note.
+An AI-assisted support automation agent that handles Zendesk tickets end to end. Not a chatbot. Not a demo. An automation service with an AI decision layer.
+What it does
+A user emails support. Zendesk creates a ticket and fires a webhook. This system receives the webhook, retrieves semantically relevant documentation, and uses a tool-constrained LLM to either post a grounded reply directly to the ticket or escalate with an internal note. The user receives an email. The whole loop closes in under 60 seconds.
 How it works
-
-Zendesk trigger fires on new ticket and sends a webhook to the Railway-hosted endpoint
-LlamaIndex retrieves the most relevant documentation chunks based on semantic similarity
-OpenAI generates a response grounded in the retrieved content using function calling
-If KB is sufficient: public reply posted to the ticket and delivered to the user via email
-If KB is insufficient: internal escalation note added and ticket routed for human review
-
+User email
+     ↓
+Zendesk ticket
+     ↓
+Zendesk webhook
+     ↓
+FastAPI endpoint (Railway)
+     ↓
+Ticket parsed
+     ↓
+Query → vector retrieval (LlamaIndex)
+     ↓
+Relevance gate (similarity cutoff)
+     ↓
+LLM chooses tool
+     ↓
+Tool executes Zendesk API call
+     ↓
+Reply posted → Zendesk emails customer
+What makes it production-grade
+Deterministic gating: A similarity cutoff prevents the model from answering questions the knowledge base can't support. Out-of-scope tickets escalate automatically rather than hallucinate.
+Tool-constrained LLM: The model doesn't freely generate text. It must choose exactly one action: reply to the customer or escalate the ticket. Structured outputs only.
+Real system side effects: This isn't a notebook. Replies post to live Zendesk tickets and land in the user's inbox.
+Production deployment: Public endpoint running on Railway with full observability via deploy and HTTP logs.
 Stack
 
 LlamaIndex for RAG pipeline and document retrieval
 FastAPI for the webhook endpoint
-OpenAI for embeddings and response generation
+OpenAI for embeddings and chat completions
 Railway for deployment
-Zendesk for ticket management and webhook trigger
+Zendesk for ticket management, webhook trigger, and reply delivery
+
+Setup
+
+Clone the repo
+Add your docs to the /docs folder
+Set environment variables in Railway or a local .env file:
+
+OPENAI_API_KEY
+ZENDESK_SUBDOMAIN
+ZENDESK_EMAIL
+ZENDESK_API_TOKEN
+OPENAI_MODEL (default: gpt-4.1-mini)
+TOP_K (default: 3)
+SIMILARITY_CUTOFF (default: 0.78)
+
+
+Deploy to Railway or run locally with uvicorn main:app
 
 Built as
-A proof of concept extending a native Zendesk AI agent with a custom RAG backend. Demonstrates end-to-end ticket resolution from webhook intake to AI-generated reply delivered via email.
-﻿# zendesk-llamaindex-agent
-
-
+A proof of concept for what a production RAG backend looks like behind a real support operation. Built in approximately 6 hours.
